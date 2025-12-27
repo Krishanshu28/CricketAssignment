@@ -2,137 +2,115 @@ using UnityEngine;
 
 public class BowlingSystem : MonoBehaviour
 {
+    [Header("References")]
     public Transform ballSpawnPoint;
     public Transform targetMarker;
     public Rigidbody rb;
     public Transform mainCamera;
 
-    [Header("Marker Settings")]
+    [Header("Settings")]
     public float markerMoveSpeed = 5f;
     public float xLimit = 3f;
-    public float zLimitMin = 1f;
-    public float zLimitMax = 18f;
-
-    [Header("Wicket Settings")]
+    public float zLimitMin = 2f;
+    public float zLimitMax = 20f;
     public float wicketOffset = 1.5f;
-    private bool isOverTheWicket = true;
-    private Vector3 initialCameraPos;
+
+    [Header("Physics Tuning")]
+    public float groundImpactHeight = 0.2f; 
 
     private float activeSwingForce = 0f;
     private float activeSpinForce = 0f;
-    private float activeBallSpeed = 25f;
-    private bool inAir = false;
     private bool ballThrown = false;
+    private bool inAir = false;
+    private bool isOverTheWicket = true;
+    private Vector3 initialCameraPos;
 
-    void Start()
-    {
-        initialCameraPos = mainCamera.localPosition;
-        UpdateSidePosition();
-        
+    void Start() {
+        if (mainCamera != null) initialCameraPos = mainCamera.localPosition;
+        UpdateSidePosition(); 
     }
 
-    void Update()
-    {
-        if(!ballThrown)
-        {
+    void Update() {
+        if (!ballThrown) {
             MoveMarker();
         }
-        
     }
 
-    void FixedUpdate()
-    {
-        if(inAir && activeSwingForce != 0)
-        {
+    void FixedUpdate() {
+        if (inAir && activeSwingForce != 0) {
             rb.AddForce(new Vector3(activeSwingForce, 0, 0), ForceMode.Acceleration);
         }
     }
 
-    //side change
-    public void ToggleSideChange()
-    {
-        isOverTheWicket = !isOverTheWicket;
-        UpdateSidePosition();
-    }
-
-    private void UpdateSidePosition()
-    {
-        float xPos = isOverTheWicket ? -wicketOffset : wicketOffset;
-
-        Vector3 newSpawnPos = ballSpawnPoint.localPosition;
-        newSpawnPos.x = xPos;
-        ballSpawnPoint.localPosition = newSpawnPos;
-
-        Vector3 newCameraPos = initialCameraPos;
-        newCameraPos.x = xPos * 0.8f;
-        mainCamera.localPosition = newCameraPos;
-    }
-
-    public void ThrowBall(float speed, float swingVal, float spinVal)
-    {
-        if(ballThrown) return;
+    public void ThrowBall(float speed, float swingVal, float spinVal) {
+        if (ballThrown) return;
         ballThrown = true;
         inAir = true;
-
-        activeBallSpeed = speed;
         activeSwingForce = swingVal;
         activeSpinForce = spinVal;
 
-        rb.isKinematic = false;
-        rb.linearVelocity = Vector3.zero;
-        rb.angularVelocity = Vector3.zero;
+        rb.isKinematic = false; 
         rb.position = ballSpawnPoint.position;
-        rb.rotation = Quaternion.identity;
+        rb.velocity = Vector3.zero;
+        rb.angularVelocity = Vector3.zero;
 
-        Vector3 displacement = targetMarker.position - ballSpawnPoint.position;
-        Vector3 planarDisp = new Vector3(displacement.x, 0, displacement.z);
+        Vector3 start = ballSpawnPoint.position;
+        Vector3 target = targetMarker.position;
 
-        float time = planarDisp.magnitude / activeBallSpeed;
+        Vector3 targetCenter = new Vector3(target.x, groundImpactHeight, target.z);
 
-        Vector3 gravity = Physics.gravity;
-        Vector3 swingVec = new Vector3(activeSwingForce, 0, 0);
-        Vector3 totalAcc = gravity + swingVec;
+        Vector3 displacement = targetCenter - start;
+        Vector3 totalAcceleration = Physics.gravity + new Vector3(swingVal, 0, 0);
 
-        Vector3 initialVel = (displacement - (0.5f * totalAcc *(time * time))) / time;
-
-        rb.linearVelocity = initialVel;
         
+        float time = displacement.magnitude / speed;
+
+        
+        Vector3 requiredVelocity = (displacement - (0.5f * totalAcceleration * time * time)) / time;
+
+        
+        rb.velocity = requiredVelocity;
     }
 
-    private void MoveMarker()
-    {
-        float x = Input.GetAxis("Horizontal") * markerMoveSpeed * Time.deltaTime;
-        float z = Input.GetAxis("Vertical") * markerMoveSpeed * Time.deltaTime;
-
-        Vector3 newPos = targetMarker.position + new Vector3(x, 0, z);
-
-        newPos.x = Mathf.Clamp(newPos.x, -xLimit, xLimit);
-        newPos.z = Mathf.Clamp(newPos.z, ballSpawnPoint.position.z + zLimitMin, ballSpawnPoint.position.z + zLimitMax);
-
-        targetMarker.position = newPos;
-    }
-
-    void OnCollisionEnter(Collision collision)
-    {
-        inAir = false;
-
-        if(collision.gameObject.CompareTag("Pitch"))
-        {
-            Vector3 spin = new Vector3(activeSpinForce, 0, 0);
-            rb.AddForce(spin, ForceMode.VelocityChange);
-        }
-    }
-
-    public void ResetSystem()
-    {
+    
+    public void ResetSystem() {
         ballThrown = false;
         inAir = false;
         activeSwingForce = 0;
         activeSpinForce = 0;
 
-        rb.linearVelocity = Vector3.zero;
+        rb.velocity = Vector3.zero;
         rb.angularVelocity = Vector3.zero;
-        rb.isKinematic = true;
+        rb.isKinematic = true; 
+        
         rb.position = ballSpawnPoint.position;
+        rb.rotation = Quaternion.identity;
+    }
+
+    public void ToggleSideChange() {
+        isOverTheWicket = !isOverTheWicket;
+        UpdateSidePosition();
+    }
+
+    private void UpdateSidePosition() {
+        float xPos = isOverTheWicket ? -wicketOffset : wicketOffset;
+        ballSpawnPoint.localPosition = new Vector3(xPos, ballSpawnPoint.localPosition.y, ballSpawnPoint.localPosition.z);
+        if (mainCamera != null) mainCamera.localPosition = new Vector3(xPos * 0.8f, initialCameraPos.y, initialCameraPos.z);
+    }
+
+    private void MoveMarker() {
+        float x = Input.GetAxis("Horizontal") * markerMoveSpeed * Time.deltaTime;
+        float z = Input.GetAxis("Vertical") * markerMoveSpeed * Time.deltaTime;
+        Vector3 newPos = targetMarker.position + new Vector3(x, 0, z);
+        newPos.x = Mathf.Clamp(newPos.x, -xLimit, xLimit);
+        newPos.z = Mathf.Clamp(newPos.z, zLimitMin, zLimitMax);
+        targetMarker.position = newPos;
+    }
+
+    void OnCollisionEnter(Collision col) {
+        inAir = false;
+        if (col.gameObject.CompareTag("Pitch")) {
+            rb.AddForce(new Vector3(activeSpinForce, 0, 0), ForceMode.VelocityChange);
+        }
     }
 }
